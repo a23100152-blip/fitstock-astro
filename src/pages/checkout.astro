@@ -1,0 +1,11 @@
+---
+// Ruta protegida: el middleware redirige a /login?next=/checkout si no hay sesión.
+import Layout from '../layouts/Layout.astro';
+import Checkout from '../components/checkout/Checkout.jsx';
+
+const user = Astro.locals.user!;
+---
+<Layout title="Checkout — FitStock">
+  <!-- client:only: el carrito vive en localStorage, solo existe en el navegador -->
+  <Checkout client:only="react" usuario={{ nombre: user.nombre, email: user.email }} />
+</Layout>

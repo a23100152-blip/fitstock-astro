@@ -1,0 +1,12 @@
+---
+import Layout from '../layouts/Layout.astro';
+Astro.response.status = 404;
+---
+<Layout title="No encontrado — FitStock">
+  <section class="section">
+    <div class="empty-state">
+      <h2>404 — No encontramos esa página</h2>
+      <a class="btn btn-secondary" href="/" style="text-decoration:none">Volver al inicio</a>
+    </div>
+  </section>
+</Layout>

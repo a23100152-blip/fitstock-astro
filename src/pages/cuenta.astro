@@ -1,0 +1,59 @@
+---
+// Ruta protegida por el middleware.
+// Muestra los datos de la cuenta y permite editar el nombre y cambiar la contraseña.
+import Layout from '../layouts/Layout.astro';
+const user = Astro.locals.user!;
+
+const error = Astro.url.searchParams.get('error');
+const ok = Astro.url.searchParams.get('ok');
+const MENSAJES_OK: Record<string, string> = {
+  nombre: 'Nombre actualizado.',
+  password: 'Contraseña actualizada. Se cerraron tus sesiones en otros dispositivos.',
+};
+const mensajeOk = ok ? MENSAJES_OK[ok] : null;
+---
+<Layout title="Mi cuenta — FitStock">
+  <section class="section">
+    <h2>Mi cuenta</h2>
+
+    {mensajeOk && <div class="auth-ok" role="status">{mensajeOk}</div>}
+    {error && <div class="auth-error" role="alert">{error}</div>}
+
+    <div class="account-card">
+      <p><strong>Nombre:</strong> {user.nombre}</p>
+      <p><strong>Correo:</strong> {user.email}</p>
+      <p>
+        <strong>Rol:</strong>
+        <span class:list={['badge', { 'badge-admin': user.rol === 'admin' }]}>{user.rol}</span>
+      </p>
+      <a class="btn btn-secondary" href="/pedidos" style="text-decoration:none;display:inline-block">Ver mis pedidos</a>
+    </div>
+
+    <form class="account-card account-form" method="POST" action="/api/cuenta/nombre">
+      <h3>Editar nombre</h3>
+      <div class="auth-field">
+        <label for="nombre">Nombre</label>
+        <input id="nombre" name="nombre" required minlength="2" value={user.nombre} autocomplete="name" />
+      </div>
+      <button class="btn btn-primary" type="submit">Guardar nombre</button>
+    </form>
+
+    <form class="account-card account-form" method="POST" action="/api/cuenta/password">
+      <h3>Cambiar contraseña</h3>
+      <div class="auth-field">
+        <label for="actual">Contraseña actual</label>
+        <input id="actual" name="actual" type="password" required autocomplete="current-password" />
+      </div>
+      <div class="auth-field">
+        <label for="nueva">Contraseña nueva (mín. 8, letras y números)</label>
+        <input id="nueva" name="nueva" type="password" required minlength="8" autocomplete="new-password" />
+      </div>
+      <div class="auth-field">
+        <label for="confirm">Confirmar contraseña nueva</label>
+        <input id="confirm" name="confirm" type="password" required minlength="8" autocomplete="new-password" />
+      </div>
+      <button class="btn btn-primary" type="submit">Cambiar contraseña</button>
+      <p class="auth-alt">Al cambiarla, se cierran tus sesiones en otros dispositivos.</p>
+    </form>
+  </section>
+</Layout>
