@@ -1,0 +1,39 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { rutaSegura } from '../lib/backend.js';
+
+const error = Astro.url.searchParams.get('error');
+const next = rutaSegura(Astro.url.searchParams.get('next') ?? '/');
+const email = Astro.url.searchParams.get('email') ?? '';
+---
+<Layout title="Iniciar sesión — FitStock">
+  <div class="auth-wrap">
+    <form class="auth-card" method="POST" action="/api/auth/login">
+      <h1>Iniciar sesión</h1>
+      <p class="sub">Entra para pagar y ver tus pedidos.</p>
+
+      {error && <div class="auth-error" role="alert">{error}</div>}
+
+      <input type="hidden" name="next" value={next} />
+
+      <div class="auth-field">
+        <label for="email">Correo electrónico</label>
+        <input id="email" name="email" type="email" required value={email} autocomplete="email" />
+      </div>
+      <div class="auth-field">
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password" />
+      </div>
+
+      <button class="btn btn-primary" type="submit" style="width:100%">Entrar</button>
+
+      <p class="auth-alt">¿No tienes cuenta? <a href={`/registro?next=${encodeURIComponent(next)}`}>Crear cuenta</a></p>
+
+      <div class="auth-demo">
+        <strong>Cuentas de demostración</strong><br />
+        Cliente: demo@fitstock.com / Demo1234<br />
+        Admin: admin@fitstock.com / Admin1234
+      </div>
+    </form>
+  </div>
+</Layout>

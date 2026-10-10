@@ -1,0 +1,180 @@
+---
+// /admin — Dashboard de administrador: estadísticas de ventas.
+// Ruta protegida: el middleware solo deja pasar al rol "admin" y el backend
+// (query estadisticasAdmin) vuelve a validarlo, así que no se puede saltar desde el navegador.
+import Layout from '../../layouts/Layout.astro';
+import KpiCard from '../../components/admin/KpiCard.astro';
+import LineChart from '../../components/admin/LineChart.astro';
+import DonutChart from '../../components/admin/DonutChart.astro';
+import BarList from '../../components/admin/BarList.astro';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+import {
+  METODO_LABEL, METODO_COLOR, ESTADO_PAGO_LABEL, ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, mxn, fechaCorta,
+} from '../../lib/metodos.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const RANGOS = [7, 30, 90];
+const pedido = Number(Astro.url.searchParams.get('dias'));
+const dias = RANGOS.includes(pedido) ? pedido : 30;
+
+const ok = Astro.url.searchParams.get('ok');
+const error = Astro.url.searchParams.get('error');
+
+const { estadisticasAdmin: e } = await backendGraphQL(
+  `query($dias: Int) {
+    estadisticasAdmin(dias: $dias) {
+      dias desde hasta
+      resumen {
+        ingresosTotales variacionIngresos pedidosPagados pedidosTotales pedidosPendientesPago
+        ticketPromedio unidadesVendidas clientes productos
+      }
+      ventasPorDia { fecha ingresos pedidos }
+      ventasPorMetodo { metodo ingresos pedidos }
+      ventasPorCategoria { categoria ingresos unidades }
+      productosMasVendidos { producto unidades ingresos }
+      pedidosPorEstado { estado pedidos }
+      stockBajo { id nombre stock categoria { nombre } }
+      pedidosRecientes { id nombreContacto metodoPago total estado estadoPago fechaCreacion }
+    }
+  }`,
+  { dias },
+  token
+);
+
+const r = e.resumen;
+const compacto = (n: number) =>
+  n >= 1000 ? `$${(n / 1000).toLocaleString('es-MX', { maximumFractionDigits: 1 })}k` : `$${Math.round(n)}`;
+
+const puntosVentas = e.ventasPorDia.map((d: any) => ({
+  etiqueta: fechaCorta(d.fecha),
+  valor: d.ingresos,
+  detalle: `${mxn(d.ingresos)} · ${d.pedidos} pedido${d.pedidos === 1 ? '' : 's'}`,
+}));
+const segmentosMetodo = e.ventasPorMetodo.map((m: any) => ({
+  etiqueta: METODO_LABEL[m.metodo], valor: m.ingresos, color: METODO_COLOR[m.metodo],
+  extra: `${m.pedidos} ped.`,
+}));
+const categorias = e.ventasPorCategoria.map((c: any) => ({
+  etiqueta: c.categoria, valor: c.ingresos, texto: mxn(c.ingresos), sub: `${c.unidades} uds.`,
+}));
+const topProductos = e.productosMasVendidos.map((p: any) => ({
+  etiqueta: p.producto, valor: p.unidades, texto: `${p.unidades} uds.`, sub: mxn(p.ingresos), color: '#ffb020',
+}));
+const porEstado = e.pedidosPorEstado.map((s: any) => ({
+  etiqueta: ESTADO_PEDIDO_LABEL[s.estado], valor: s.pedidos, texto: `${s.pedidos}`, color: ESTADO_PEDIDO_COLOR[s.estado],
+}));
+const ESTADOS_ENVIO = ['procesando', 'enviado', 'entregado', 'cancelado'];
+const ESTADOS_PAGO = ['pendiente', 'pagado', 'cancelado'];
+const volver = `/admin?dias=${dias}`;
+---
+<Layout title="Panel de administración — FitStock">
+  <section class="section dash">
+    <header class="dash-head">
+      <div>
+        <h2>📊 Panel de administración</h2>
+        <p class="dash-sub">Ventas del {fechaCorta(e.desde)} al {fechaCorta(e.hasta)} · solo cuentan pedidos <strong>pagados</strong> y no cancelados</p>
+      </div>
+      <nav class="dash-rangos" aria-label="Periodo">
+        {RANGOS.map((d) => (
+          <a href={`/admin?dias=${d}`} class:list={['dash-rango', { activo: d === dias }]}>Últimos {d} días</a>
+        ))}
+      </nav>
+    </header>
+
+    {ok && <div class="auth-ok" role="status">{ok}</div>}
+    {error && <div class="auth-error" role="alert">{error}</div>}
+
+    <div class="kpi-grid">
+      <KpiCard titulo="Ingresos" valor={mxn(r.ingresosTotales)} variacion={r.variacionIngresos} acento />
+      <KpiCard titulo="Pedidos pagados" valor={String(r.pedidosPagados)} detalle={`${r.pedidosTotales} pedidos en total`} />
+      <KpiCard titulo="Ticket promedio" valor={mxn(r.ticketPromedio)} detalle="Ingreso por pedido pagado" />
+      <KpiCard titulo="Unidades vendidas" valor={String(r.unidadesVendidas)} detalle={`${r.productos} productos en catálogo`} />
+      <KpiCard titulo="Pagos pendientes" valor={String(r.pedidosPendientesPago)} detalle="Esperando confirmación de pago" />
+      <KpiCard titulo="Clientes registrados" valor={String(r.clientes)} />
+    </div>
+
+    <div class="dash-grid">
+      <article class="dash-card dash-ancho">
+        <h3>Ventas por día</h3>
+        <LineChart datos={puntosVentas} formatoEje={compacto} />
+      </article>
+
+      <article class="dash-card">
+        <h3>Ingresos por método de pago</h3>
+        <DonutChart segmentos={segmentosMetodo} centroTitulo="Total" centroValor={compacto(r.ingresosTotales)} formato={mxn} />
+      </article>
+
+      <article class="dash-card">
+        <h3>Ventas por categoría</h3>
+        <BarList items={categorias} />
+      </article>
+
+      <article class="dash-card">
+        <h3>Productos más vendidos</h3>
+        <BarList items={topProductos} />
+      </article>
+
+      <article class="dash-card">
+        <h3>Pedidos por estado</h3>
+        <BarList items={porEstado} />
+      </article>
+
+      <article class="dash-card dash-ancho">
+        <h3>⚠️ Inventario bajo <small>(10 unidades o menos)</small></h3>
+        {e.stockBajo.length === 0 ? (
+          <p class="dash-vacio">Todo el inventario está en buen nivel. ✔</p>
+        ) : (
+          <ul class="stock-lista">
+            {e.stockBajo.map((p: any) => (
+              <li>
+                <span>{p.nombre} <small>· {p.categoria.nombre}</small></span>
+                <span class:list={['stock-pill', { 'stock-critico': p.stock <= 5 }]}>{p.stock} en stock</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+    </div>
+
+    <article class="dash-card" id="pedidos">
+      <h3>Pedidos recientes</h3>
+      <div class="tabla-scroll">
+        <table class="tabla-admin">
+          <thead>
+            <tr><th>#</th><th>Cliente</th><th>Método</th><th>Total</th><th>Pago</th><th>Envío</th><th>Fecha</th></tr>
+          </thead>
+          <tbody>
+            {e.pedidosRecientes.map((p: any) => (
+              <tr>
+                <td>#{p.id}</td>
+                <td>{p.nombreContacto}</td>
+                <td><span class="punto-color" style={`background:${METODO_COLOR[p.metodoPago]}`}></span> {METODO_LABEL[p.metodoPago]}</td>
+                <td>{mxn(p.total)}</td>
+                <td>
+                  <form method="POST" action="/api/admin/pedido" class="form-inline">
+                    <input type="hidden" name="id" value={p.id} />
+                    <input type="hidden" name="volver" value={volver} />
+                    <select name="estadoPago" aria-label={`Estado de pago del pedido ${p.id}`} onchange="this.form.submit()" class:list={['sel', `sel-pago-${p.estadoPago}`]}>
+                      {ESTADOS_PAGO.map((s) => <option value={s} selected={s === p.estadoPago}>{ESTADO_PAGO_LABEL[s]}</option>)}
+                    </select>
+                  </form>
+                </td>
+                <td>
+                  <form method="POST" action="/api/admin/pedido" class="form-inline">
+                    <input type="hidden" name="id" value={p.id} />
+                    <input type="hidden" name="volver" value={volver} />
+                    <select name="estado" aria-label={`Estado de envío del pedido ${p.id}`} onchange="this.form.submit()" class="sel">
+                      {ESTADOS_ENVIO.map((s) => <option value={s} selected={s === p.estado}>{ESTADO_PEDIDO_LABEL[s]}</option>)}
+                    </select>
+                  </form>
+                </td>
+                <td class="celda-fecha">{p.fechaCreacion}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="dash-nota">Cambiar el estado de pago de una transferencia a "Pagado" la suma a los ingresos. Cancelar un pedido devuelve su stock.</p>
+    </article>
+  </section>
+</Layout>

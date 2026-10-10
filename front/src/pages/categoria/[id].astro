@@ -1,0 +1,24 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CategoryDetail from '../../components/CategoryDetail.jsx';
+import { backendGraphQL } from '../../lib/backend.js';
+
+const { id } = Astro.params;
+
+const data = await backendGraphQL(
+  `query ($id: ID!) {
+    categoria(id: $id) {
+      id nombre descripcion icono
+      productos { id nombre precio stock imagenUrl }
+    }
+  }`,
+  { id }
+);
+
+if (!data.categoria) return Astro.rewrite('/404');
+const { productos, ...categoria } = data.categoria;
+---
+<Layout title={`${categoria.nombre} — FitStock`}>
+  <!-- client:load: se renderiza en el servidor y se hidrata en el navegador -->
+  <CategoryDetail client:load categoria={categoria} productos={productos} />
+</Layout>

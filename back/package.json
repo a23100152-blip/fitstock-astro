@@ -1,0 +1,22 @@
+{
+  "name": "fitstock-backend",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend GraphQL de FitStock (PP1 + Auth System + Métodos de cobro + Dashboard admin), separado del frontend de Astro.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "db:reset": "node -e \"import('node:fs').then(fs=>{fs.rmSync('data/fitstock.sqlite',{force:true});console.log('BD borrada: se recreará al iniciar')})\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "graphql": "^17.0.2",
+    "graphql-yoga": "^5.24.1"
+  }
+}

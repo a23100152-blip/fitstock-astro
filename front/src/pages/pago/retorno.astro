@@ -1,0 +1,124 @@
+---
+// /pago/retorno — A esta página regresa el cliente desde PayPal o Mercado Pago.
+// IMPORTANTE: no se confía en lo que diga la URL. Aquí solo se leen los
+// identificadores y se le pide al backend que VERIFIQUE el pago con la pasarela
+// (mutation confirmarPago). Solo si la pasarela lo confirma, el pedido queda "pagado".
+import Layout from '../../layouts/Layout.astro';
+import LimpiarCarrito from '../../components/pago/LimpiarCarrito.jsx';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+import { METODO_LABEL, mxn } from '../../lib/metodos.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const q = Astro.url.searchParams;
+
+const metodo = q.get('metodo');
+const pedidoId = q.get('pedido');
+const resultado = q.get('resultado'); // exito | pendiente | fallido | cancelado
+// PayPal regresa ?token=<id de la orden>; Mercado Pago regresa ?payment_id=<id del pago>
+const referencia = metodo === 'paypal' ? q.get('token') : (q.get('payment_id') ?? q.get('collection_id'));
+
+if (!['paypal', 'mercadopago'].includes(metodo ?? '') || !/^\d+$/.test(pedidoId ?? '')) {
+  return Astro.redirect('/');
+}
+
+const CAMPOS = `id total subtotal envio estado estadoPago metodoPago referenciaPago fechaPago
+  detalles { cantidad subtotal producto { nombre } }`;
+
+type Estado = 'pagado' | 'pendiente' | 'cancelado' | 'error';
+let estado: Estado = 'error';
+let pedido: any = null;
+let mensajeError = '';
+
+try {
+  if (resultado === 'cancelado' || resultado === 'fallido') {
+    // El cliente canceló en la pasarela o el pago fue rechazado: se cancela el pedido y se devuelve el stock.
+    const data = await backendGraphQL(
+      `mutation($id: ID!) { cancelarPago(pedidoId: $id) { ${CAMPOS} } }`,
+      { id: pedidoId },
+      token
+    );
+    pedido = data.cancelarPago;
+    estado = 'cancelado';
+  } else {
+    const data = await backendGraphQL(
+      `mutation($id: ID!, $ref: String) { confirmarPago(pedidoId: $id, referencia: $ref) { ${CAMPOS} } }`,
+      { id: pedidoId, ref: referencia },
+      token
+    );
+    pedido = data.confirmarPago;
+    estado = pedido.estadoPago === 'pagado' ? 'pagado' : 'pendiente';
+  }
+} catch (err: any) {
+  mensajeError = err.message;
+}
+
+const pasarela = METODO_LABEL[metodo!];
+const simulado = typeof pedido?.referenciaPago === 'string' && pedido.referenciaPago.startsWith('SIM-');
+---
+<Layout title="Resultado del pago — FitStock">
+  {estado === 'pagado' && <LimpiarCarrito client:only="react" />}
+
+  <section class="section">
+    <div class="pay-result">
+      {estado === 'pagado' && (
+        <>
+          <div class="pay-icon pay-ok">✓</div>
+          <h2>¡Pago confirmado!</h2>
+          <p class="pay-sub">
+            Recibimos tu pago con <strong>{pasarela}</strong>. Tu pedido <strong>#{pedido.id}</strong> ya se está preparando.
+          </p>
+        </>
+      )}
+      {estado === 'pendiente' && (
+        <>
+          <div class="pay-icon pay-wait">⏳</div>
+          <h2>Tu pago aún no se confirma</h2>
+          <p class="pay-sub">
+            {pasarela} todavía no nos confirma el pago del pedido <strong>#{pedido.id}</strong>.
+            Si elegiste pagar en efectivo o en un banco puede tardar. Revisa "Mis pedidos" más tarde:
+            el estado se actualiza al confirmar el pago.
+          </p>
+        </>
+      )}
+      {estado === 'cancelado' && (
+        <>
+          <div class="pay-icon pay-fail">✕</div>
+          <h2>El pago no se completó</h2>
+          <p class="pay-sub">
+            No se hizo ningún cargo y el pedido <strong>#{pedido.id}</strong> fue cancelado. Tu carrito sigue intacto:
+            puedes intentarlo de nuevo o elegir otro método de pago.
+          </p>
+        </>
+      )}
+      {estado === 'error' && (
+        <>
+          <div class="pay-icon pay-fail">!</div>
+          <h2>No pudimos verificar tu pago</h2>
+          <div class="auth-error" role="alert">{mensajeError}</div>
+          <p class="pay-sub">Si ya pagaste, revisa "Mis pedidos"; si no aparece pagado, contáctanos con el número de pedido #{pedidoId}.</p>
+        </>
+      )}
+
+      {pedido && (
+        <div class="pay-summary">
+          {pedido.detalles.map((d: any) => (
+            <div class="order-line"><span>{d.producto.nombre} × {d.cantidad}</span><span>{mxn(d.subtotal)}</span></div>
+          ))}
+          <div class="order-line"><span>Envío</span><span>{pedido.envio === 0 ? 'Gratis' : mxn(pedido.envio)}</span></div>
+          <div class="order-line pay-total"><span>Total</span><span>{mxn(pedido.total)} MXN</span></div>
+          {pedido.referenciaPago && (
+            <div class="order-line"><span>Referencia de pago</span><span>{pedido.referenciaPago}</span></div>
+          )}
+          {simulado && <p class="pay-note">Pago de demostración (modo simulado): no se realizó ningún cargo real.</p>}
+        </div>
+      )}
+
+      <div class="pay-actions">
+        {estado === 'pagado' && <a class="btn btn-primary" href="/pedidos">Ver mis pedidos</a>}
+        {estado === 'pagado' && <a class="btn btn-secondary" href="/">Seguir comprando</a>}
+        {estado === 'cancelado' && <a class="btn btn-primary" href="/checkout">Volver al checkout</a>}
+        {(estado === 'pendiente' || estado === 'error') && <a class="btn btn-primary" href="/pedidos">Ver mis pedidos</a>}
+      </div>
+    </div>
+  </section>
+</Layout>

@@ -1,0 +1,44 @@
+---
+// /pago/simulado — Pasarela de PRUEBA. Solo se usa cuando el backend no tiene
+// credenciales de PayPal / Mercado Pago (modo simulado). Imita la pantalla de pago
+// de la pasarela para poder probar y demostrar el flujo completo sin cuentas de desarrollador.
+// No es un riesgo en modo real: el backend siempre verifica el pago con la pasarela de verdad.
+import Layout from '../../layouts/Layout.astro';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+import { METODO_LABEL, mxn } from '../../lib/metodos.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const metodo = Astro.url.searchParams.get('metodo') ?? '';
+const pedidoId = Astro.url.searchParams.get('pedido') ?? '';
+
+if (!['paypal', 'mercadopago'].includes(metodo) || !/^\d+$/.test(pedidoId)) return Astro.redirect('/');
+
+let pedido: any = null;
+try {
+  const data = await backendGraphQL('query($id: ID!) { pedido(id: $id) { id total estadoPago } }', { id: pedidoId }, token);
+  pedido = data.pedido;
+} catch {
+  pedido = null;
+}
+if (!pedido) return Astro.redirect('/pedidos');
+
+const base = `/pago/retorno?metodo=${metodo}&pedido=${pedidoId}`;
+const urlAprobar = `${base}&resultado=exito`;
+const urlCancelar = `${base}&resultado=${metodo === 'paypal' ? 'cancelado' : 'fallido'}`;
+const nombre = METODO_LABEL[metodo];
+---
+<Layout title={`Pagar con ${nombre} (simulado) — FitStock`}>
+  <section class="section">
+    <div class={`sim-gateway sim-${metodo}`}>
+      <div class="sim-brand">{metodo === 'paypal' ? '🅿️ PayPal' : '🤝 Mercado Pago'}</div>
+      <p class="sim-demo">MODO DEMOSTRACIÓN — esta pantalla imita a {nombre}. No se hará ningún cargo real.</p>
+      <p class="sim-label">Pagarás a <strong>FitStock</strong></p>
+      <p class="sim-amount">{mxn(pedido.total)} <small>MXN</small></p>
+      <p class="sim-label">Pedido #{pedido.id}</p>
+      <div class="pay-actions">
+        <a class="btn btn-primary" href={urlAprobar}>Pagar ahora</a>
+        <a class="btn btn-secondary" href={urlCancelar}>Cancelar y volver a la tienda</a>
+      </div>
+    </div>
+  </section>
+</Layout>

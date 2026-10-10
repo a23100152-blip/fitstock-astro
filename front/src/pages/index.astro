@@ -1,0 +1,25 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { backendGraphQL } from '../lib/backend.js';
+
+const { categorias } = await backendGraphQL('{ categorias { id nombre descripcion icono } }');
+---
+<Layout>
+  <section class="hero">
+    <h1>Suplementos, ropa y accesorios para tu entrenamiento 💪</h1>
+    <p>Todo en un solo lugar, con información clara de cada producto y un checkout seguro de principio a fin.</p>
+  </section>
+
+  <section class="section">
+    <h2>Explora por categoría</h2>
+    <div class="grid">
+      {categorias.map((cat) => (
+        <a class="card" href={`/categoria/${cat.id}`} style="text-decoration:none;color:inherit">
+          <div class="card-thumb">{cat.icono}</div>
+          <span class="card-title">{cat.nombre}</span>
+          {cat.descripcion && <span class="card-stock">{cat.descripcion}</span>}
+        </a>
+      ))}
+    </div>
+  </section>
+</Layout>

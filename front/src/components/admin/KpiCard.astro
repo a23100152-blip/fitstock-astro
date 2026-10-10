@@ -1,0 +1,22 @@
+---
+// Tarjeta de indicador (KPI) del dashboard. `variacion` es un % contra el periodo anterior (opcional).
+interface Props {
+  titulo: string;
+  valor: string;
+  detalle?: string;
+  variacion?: number | null;
+  acento?: boolean;
+}
+const { titulo, valor, detalle, variacion = null, acento = false } = Astro.props;
+const sube = variacion !== null && variacion >= 0;
+---
+<article class:list={['kpi', { 'kpi-acento': acento }]}>
+  <p class="kpi-titulo">{titulo}</p>
+  <p class="kpi-valor">{valor}</p>
+  {variacion !== null && (
+    <p class:list={['kpi-delta', sube ? 'kpi-sube' : 'kpi-baja']}>
+      {sube ? '▲' : '▼'} {Math.abs(variacion).toFixed(1)}% <span>vs. periodo anterior</span>
+    </p>
+  )}
+  {detalle && <p class="kpi-detalle">{detalle}</p>}
+</article>

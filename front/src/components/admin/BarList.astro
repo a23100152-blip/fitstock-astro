@@ -1,0 +1,24 @@
+---
+// Lista de barras horizontales (HTML + CSS): categorías y productos más vendidos.
+interface Item { etiqueta: string; valor: number; texto: string; sub?: string; color?: string }
+interface Props { items: Item[]; vacio?: string }
+const { items, vacio = 'Sin datos en este periodo.' } = Astro.props;
+const max = Math.max(...items.map((i) => i.valor), 0);
+---
+{items.length === 0 ? (
+  <p class="dash-vacio">{vacio}</p>
+) : (
+  <ul class="barlist">
+    {items.map((i, idx) => (
+      <li>
+        <div class="barlist-fila">
+          <span class="barlist-nombre">{idx + 1}. {i.etiqueta}</span>
+          <span class="barlist-texto">{i.texto}{i.sub && <small> · {i.sub}</small>}</span>
+        </div>
+        <div class="barlist-pista">
+          <div class="barlist-barra" style={`width:${max > 0 ? Math.max((i.valor / max) * 100, 2) : 0}%;background:${i.color ?? 'var(--color-primary)'}`}></div>
+        </div>
+      </li>
+    ))}
+  </ul>
+)}

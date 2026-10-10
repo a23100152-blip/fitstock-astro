@@ -1,0 +1,48 @@
+---
+// Gráfica de dona en SVG puro con leyenda: reparto de ingresos por método de pago.
+interface Segmento { etiqueta: string; valor: number; color: string; extra?: string }
+interface Props { segmentos: Segmento[]; centroTitulo: string; centroValor: string; formato: (n: number) => string }
+const { segmentos, centroTitulo, centroValor, formato } = Astro.props;
+
+const R = 70, C = 2 * Math.PI * R;
+const total = segmentos.reduce((a, s) => a + s.valor, 0);
+let acumulado = 0;
+const arcos = segmentos
+  .filter((s) => s.valor > 0)
+  .map((s) => {
+    const largo = (s.valor / total) * C;
+    const arco = { ...s, largo, desplazamiento: -acumulado };
+    acumulado += largo;
+    return arco;
+  });
+---
+<div class="donut">
+  <svg viewBox="0 0 200 200" class="donut-svg" role="img" aria-label="Ingresos por método de pago">
+    <circle cx="100" cy="100" r={R} fill="none" stroke="#1e1e1e" stroke-width="26" />
+    {total > 0 && arcos.map((a) => (
+      <circle
+        cx="100" cy="100" r={R} fill="none" stroke={a.color} stroke-width="26"
+        stroke-dasharray={`${Math.max(a.largo - 1.5, 0.1)} ${C - Math.max(a.largo - 1.5, 0.1)}`}
+        stroke-dashoffset={a.desplazamiento}
+        transform="rotate(-90 100 100)"
+      >
+        <title>{a.etiqueta}: {formato(a.valor)} ({((a.valor / total) * 100).toFixed(1)}%)</title>
+      </circle>
+    ))}
+    <text x="100" y="94" text-anchor="middle" class="donut-centro-t">{centroTitulo}</text>
+    <text x="100" y="116" text-anchor="middle" class="donut-centro-v">{centroValor}</text>
+  </svg>
+
+  <ul class="donut-leyenda">
+    {segmentos.map((s) => (
+      <li>
+        <span class="punto-color" style={`background:${s.color}`}></span>
+        <span class="leyenda-nombre">{s.etiqueta}</span>
+        <span class="leyenda-valor">
+          {formato(s.valor)}
+          <small>{total > 0 ? ((s.valor / total) * 100).toFixed(0) : 0}%{s.extra ? ` · ${s.extra}` : ''}</small>
+        </span>
+      </li>
+    ))}
+  </ul>
+</div>

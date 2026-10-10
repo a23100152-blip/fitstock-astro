@@ -1,83 +1,76 @@
 # FitStock — PP1 + Auth System migrado a Astro
 
-Tienda de suplementos, ropa y accesorios (PP1) con sistema de autenticación,
-migrada de **React + Vite + servidor GraphQL separado** a **Astro (SSR)** en un
-solo proyecto y un solo proceso.
+Proyecto separado en dos partes independientes:
 
-## Cómo correrlo
+- **`back/`** — servidor GraphQL (Node + graphql-yoga + libSQL/SQLite). Es el
+  único lugar que toca la base de datos.
+- **`front/`** — sitio en Astro (con islas de React para lo interactivo).
+  Le habla a `back/` únicamente por HTTP (`fetch` a `/graphql`), nunca toca
+  la base de datos directamente.
 
-Requiere **Node 22+**. La BD es libSQL: en local usa `data/fitstock.sqlite` y en Netlify usa Turso (variables `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`).
+## Cómo correrlo localmente (dos terminales)
 
+**Terminal 1 — backend:**
 ```bash
+cd back
 npm install
-npm run dev          # http://localhost:4321
+npm run dev
 ```
+Debe quedar escuchando en `http://localhost:4000/graphql`.
+La primera vez que arranca crea la base de datos (`back/data/fitstock.sqlite`)
+con el esquema de `db.sql` y dos cuentas de prueba:
+- Cliente: `demo@fitstock.com` / `Demo1234`
+- Admin: `admin@fitstock.com` / `Admin1234`
 
-Producción: se despliega en Netlify con `@astrojs/netlify` (ver `netlify.toml`).
-Reiniciar datos: `npm run db:reset` (la BD se recrea al siguiente arranque).
-
-### Cuentas de demostración
-
-| Rol     | Correo               | Contraseña |
-|---------|----------------------|------------|
-| Cliente | demo@fitstock.com    | Demo1234   |
-| Admin   | admin@fitstock.com   | Admin1234  |
-
-## Qué cambió en la migración
-
-| Antes (PP1)                                   | Ahora (Astro)                                              |
-|-----------------------------------------------|------------------------------------------------------------|
-| SPA de React, navegación con Zustand (`vista`)| Rutas por archivo: `/`, `/categoria/[id]`, `/checkout`…    |
-| Backend aparte en `:4000` (Yoga)              | `src/pages/api/graphql.js` en el mismo proyecto            |
-| Home/categorías/sidebar cargados con `useEffect` | Cargados en el **servidor** (`.astro`) y enviados como HTML |
-| Todo el árbol era React                       | Layout y páginas en `.astro`; React solo en **islas**      |
-| Imágenes importadas por Vite                  | Servidas desde `public/products/`                          |
-| `ToastContext` (Context API)                  | `useToastStore` (Zustand): Context no cruza islas          |
-| Carrito solo en memoria                       | Carrito con `persist` (localStorage): sobrevive entre páginas |
-| BD se borraba en cada arranque                | BD persistente (hay usuarios y sesiones); semilla solo la 1ª vez |
-
-### Islas de React (lo único que se hidrata)
-
-- `CategoryDetail` (`client:load`): búsqueda, orden, agregar rápido, modal de producto.
-- `CartWidget` (`client:only`): botón con contador + drawer del carrito.
-- `Checkout` (`client:only`): flujo de 3 pasos + confirmación.
-- `ToastHost` (`client:only`): notificaciones.
-
-`client:only` se usa donde el estado vive en `localStorage` (no existe en el servidor).
-
-## Auth System
-
-- **Registro / login / logout** con formularios HTML normales → `src/pages/api/auth/*`.
-- **Contraseñas**: `scrypt` con salt aleatorio y comparación en tiempo constante (`src/server/password.js`).
-- **Sesiones**: token aleatorio en cookie `httpOnly` + `SameSite=Lax`; en la BD solo se guarda su SHA-256 (`src/server/auth.js`). Expiran a los 7 días.
-- **Middleware** (`src/middleware.js`): pone `Astro.locals.user` en cada petición, protege `/checkout`, `/cuenta` y `/pedidos` (redirige a `/login?next=…`) y saca de `/login` a quien ya tiene sesión.
-- **Autorización en GraphQL** (`src/server/resolvers.js`): `crearPedido` y `misPedidos` requieren sesión; `pedido(id)` solo para su dueño o admin; `pedidos`, `crearProducto`, `actualizarProducto`, `eliminarProducto` y `actualizarEstadoPedido` solo admin.
-- **Límite de intentos de login** (`src/server/auth.js` + `api/auth/login.js`): 5 fallos por correo en 15 minutos bloquean el login (aunque la contraseña sea correcta) hasta que pase la ventana. Un login exitoso borra los fallos. Se cuenta por correo, exista o no la cuenta, para no revelar qué correos están registrados.
-- **Limpieza de sesiones vencidas**: cada login/registro borra de la tabla `sesion` las filas con `expira_en` pasado.
-- **Mi cuenta** (`/cuenta`): editar nombre y cambiar contraseña. Para cambiarla se exige la contraseña actual, la nueva debe cumplir las reglas del registro y ser distinta, y al terminar se **cierran las demás sesiones** de la cuenta (la actual se conserva).
-- Protección CSRF: Astro rechaza POST de formularios con `Origin` distinto (403); anti open-redirect en `next`.
-
-> El zip original de PP1 no incluía el Auth System, así que se implementó aquí desde cero.
-
-### Limitaciones conocidas (no incluidas a propósito)
-
-Sin recuperación de contraseña ("olvidé mi contraseña", requiere enviar correos), sin verificación de correo, sin cambio de correo y sin pantalla de administración. Las sesiones duran 7 días fijos desde el login (no se renuevan al volver a entrar).
-
-## Estructura
-
+**Terminal 2 — frontend:**
+```bash
+cd front
+npm install
+npm run dev
 ```
-db/db.sql                    esquema + semilla (usuario, sesion, pedido.usuario_id)
-src/
-  middleware.js              sesión + rutas protegidas
-  layouts/Layout.astro       topbar + sidebar + footer
-  pages/
-    index.astro  categoria/[id].astro  checkout.astro
-    login.astro  registro.astro  cuenta.astro  pedidos.astro  404.astro
-    api/graphql.js  api/auth/{login,register,logout}.js  api/cuenta/{nombre,password}.js
-  server/                    db, auth, password, schema, resolvers, gql (ejecución en proceso)
-  components/                islas React (+ checkout/)
-  store/                     Zustand: carrito, UI, toasts
-```
+Debe quedar escuchando en `http://localhost:4321`. El archivo `front/.env`
+ya apunta a `BACKEND_URL=http://localhost:4000`.
 
-Las páginas `.astro` ejecutan GraphQL **en proceso** (`src/server/gql.js`), sin
-hacer una petición HTTP a sí mismas; el navegador usa el mismo esquema vía `/api/graphql`.
+Con ambos corriendo, abre `http://localhost:4321` en el navegador.
+
+## Notas sobre la separación
+
+- `front/` no importa nada de `back/` ni de ninguna librería de base de
+  datos: todo el acceso a datos pasa por `front/src/lib/backend.js`, que
+  hace peticiones HTTP reales a `BACKEND_URL`.
+- La sesión viaja como una cookie httpOnly puesta por Astro
+  (`front/src/pages/api/auth/*`), pero quien valida esa sesión en cada
+  petición es el backend (`back/src/auth.js` + `back/server.js`), no Astro.
+
+## Despliegue (si lo piden)
+
+- `front/` → Netlify (`netlify.toml`), con la variable `BACKEND_URL`.
+- `back/` → cualquier host Node (Render, Railway, Fly…) con `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`
+  y `CORS_ORIGIN` con la URL del front.
+
+---
+
+## Métodos de cobro (PayPal + Mercado Pago) y Dashboard de administrador
+
+### Pagar con PayPal / Mercado Pago
+En el checkout (paso "Pago") ahora hay 4 métodos: tarjeta, **PayPal**, **Mercado Pago** y transferencia.
+
+1. Al confirmar, se crea el pedido en estado de pago `pendiente` (el stock queda reservado).
+2. El backend crea la orden (PayPal) o preferencia (Mercado Pago) y el cliente es redirigido a la pasarela.
+3. Al volver a `/pago/retorno`, el backend **consulta a la pasarela** si el pago es real y coincide con el pedido y el monto. Solo entonces queda `pagado` y se vacía el carrito.
+4. Si el cliente cancela, el pedido se cancela y el stock se devuelve. Un pedido sin pagar por más de 30 min se cancela solo.
+
+**Modo simulado (por defecto):** sin credenciales, las dos pasarelas usan una pantalla de pago de demostración (`/pago/simulado`) para probar todo el flujo sin cuentas de desarrollador.
+
+**Modo real (sandbox):** copia `back/.env.example` a `back/.env`, pon tus credenciales de prueba
+(`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `MP_ACCESS_TOKEN`) y reinicia el backend. Al arrancar verás
+`PayPal: real · Mercado Pago: real`. Para Mercado Pago paga con un *usuario comprador de prueba* y sus tarjetas de prueba.
+
+### Dashboard de administrador
+Entra con `admin@fitstock.com` / `Admin1234` y abre **📊 Panel admin** (o `/admin`). Muestra ingresos, pedidos,
+ticket promedio, ventas por día, ingresos por método de pago, ventas por categoría, productos más vendidos,
+pedidos por estado, inventario bajo y los pedidos recientes (el admin puede cambiar el estado de pago y de envío).
+Solo cuentan como venta los pedidos **pagados** y no cancelados.
+
+Para tener datos de ejemplo: `cd back && npm run seed:demo` (crea ~50 pedidos de los últimos 45 días; es repetible).
+`npm run db:reset` deja la base limpia.
