@@ -1,6 +1,6 @@
 ---
-// /pago/simulado — Pasarela de PRUEBA. Solo se usa cuando el backend no tiene
-// credenciales de PayPal / Mercado Pago (modo simulado). Imita la pantalla de pago
+// /pago/simulado — Pasarela de PRUEBA de PayPal. Solo se usa cuando el backend no tiene
+// credenciales de PayPal (modo simulado). Imita la pantalla de pago
 // de la pasarela para poder probar y demostrar el flujo completo sin cuentas de desarrollador.
 // No es un riesgo en modo real: el backend siempre verifica el pago con la pasarela de verdad.
 import Layout from '../../layouts/Layout.astro';
@@ -11,7 +11,7 @@ const token = Astro.cookies.get(COOKIE)?.value;
 const metodo = Astro.url.searchParams.get('metodo') ?? '';
 const pedidoId = Astro.url.searchParams.get('pedido') ?? '';
 
-if (!['paypal', 'mercadopago'].includes(metodo) || !/^\d+$/.test(pedidoId)) return Astro.redirect('/');
+if (!['paypal'].includes(metodo) || !/^\d+$/.test(pedidoId)) return Astro.redirect('/');
 
 let pedido: any = null;
 try {
@@ -24,7 +24,8 @@ if (!pedido) return Astro.redirect('/pedidos');
 
 const base = `/pago/retorno?metodo=${metodo}&pedido=${pedidoId}`;
 const urlAprobar = `${base}&resultado=exito`;
-const urlCancelar = `${base}&resultado=${metodo === 'paypal' ? 'cancelado' : 'fallido'}`;
+const urlCancelar = `${base}&resultado=cancelado`;
+const urlRechazar = `${base}&resultado=fallido`; // simula que la pasarela rechazó el pago
 const nombre = METODO_LABEL[metodo];
 ---
 <Layout title={`Pagar con ${nombre} (simulado) — FitStock`}>
@@ -37,6 +38,7 @@ const nombre = METODO_LABEL[metodo];
       <p class="sim-label">Pedido #{pedido.id}</p>
       <div class="pay-actions">
         <a class="btn btn-primary" href={urlAprobar}>Pagar ahora</a>
+        <a class="btn btn-secondary" href={urlRechazar}>Simular pago rechazado</a>
         <a class="btn btn-secondary" href={urlCancelar}>Cancelar y volver a la tienda</a>
       </div>
     </div>

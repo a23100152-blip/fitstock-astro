@@ -19,10 +19,10 @@ import {
 } from './auth.js';
 import {
   METODOS_CON_PASARELA,
+  METODOS_CON_REDIRECCION,
   crearPagoPaypal,
   verificarPagoPaypal,
-  crearPagoMercadoPago,
-  verificarPagoMercadoPago,
+  cobrarConTarjetaMercadoPago,
 } from './pagos.js';
 import { ahoraSQL, cancelarPedidoYRestaurarStock } from './pedidos.js';
 import { calcularEstadisticas } from './estadisticas.js';
@@ -135,7 +135,10 @@ export const resolvers = {
 
     misPedidos: async (_p, _a, ctx) => {
       const user = requerirUsuario(ctx);
-      return (await db.all('SELECT * FROM pedido WHERE usuario_id = ? ORDER BY id DESC', user.id)).map(mapPedido);
+      // Los intentos de pago que nunca se completaron (rechazados o cancelados) no son pedidos del cliente.
+      return (
+        await db.all("SELECT * FROM pedido WHERE usuario_id = ? AND estado_pago <> 'cancelado' ORDER BY id DESC", user.id)
+      ).map(mapPedido);
     },
 
     pedido: async (_p, { id }, ctx) => {
@@ -331,59 +334,86 @@ export const resolvers = {
     },
 
     // ---- Métodos de cobro: PayPal y Mercado Pago ----
+    // PayPal: crea la orden y devuelve la URL a la que se redirige al cliente.
+    // (Mercado Pago ya no redirige: se cobra con pagarConTarjetaMP.)
     iniciarPago: async (_p, { pedidoId }, ctx) => {
       const row = await pedidoPropio(ctx, pedidoId);
-      if (!METODOS_CON_PASARELA.includes(row.metodo_pago)) {
-        throw new GraphQLError('Este pedido no se paga con PayPal ni Mercado Pago.');
+      if (!METODOS_CON_REDIRECCION.includes(row.metodo_pago)) {
+        throw new GraphQLError('Este pedido no se paga con una pasarela de redirección.');
       }
       if (row.estado_pago === 'pagado') throw new GraphQLError('Este pedido ya está pagado.');
       if (row.estado_pago === 'cancelado' || row.estado === 'cancelado') {
         throw new GraphQLError('Este pedido fue cancelado. Vuelve a hacer tu compra.');
       }
 
-      const pedido = mapPedido(row);
-      let inicio;
-      if (row.metodo_pago === 'paypal') {
-        inicio = await crearPagoPaypal(pedido);
-      } else {
-        const lineas = (
-          await db.all(
-            `SELECT d.producto_id, d.cantidad, d.precio_unitario, pr.nombre
-               FROM pedido_detalle d JOIN producto pr ON pr.id = d.producto_id
-              WHERE d.pedido_id = ?`,
-            row.id
-          )
-        ).map((l) => ({ productoId: l.producto_id, cantidad: l.cantidad, precioUnitario: l.precio_unitario, nombre: l.nombre }));
-        inicio = await crearPagoMercadoPago(pedido, lineas);
-      }
-
+      const inicio = await crearPagoPaypal(mapPedido(row));
       await db.run('UPDATE pedido SET referencia_pago = ? WHERE id = ?', inicio.referencia, row.id);
       return { metodo: row.metodo_pago, modo: inicio.modo, urlPago: inicio.urlPago, referencia: inicio.referencia };
     },
 
+    // PayPal: al volver de la pasarela, verifica el pago con ella.
     confirmarPago: async (_p, { pedidoId, referencia }, ctx) => {
       const row = await pedidoPropio(ctx, pedidoId);
       if (row.estado_pago === 'pagado') return mapPedido(row); // idempotente: recargar la página no cobra dos veces
-      if (!METODOS_CON_PASARELA.includes(row.metodo_pago)) {
-        throw new GraphQLError('Este pedido no se paga con PayPal ni Mercado Pago.');
+      if (!METODOS_CON_REDIRECCION.includes(row.metodo_pago)) {
+        throw new GraphQLError('Este pedido no se paga con una pasarela de redirección.');
       }
       if (row.estado_pago === 'cancelado' || row.estado === 'cancelado') {
         throw new GraphQLError('Este pedido fue cancelado y ya no puede pagarse.');
       }
 
-      const pedido = mapPedido(row);
-      const resultado =
-        row.metodo_pago === 'paypal'
-          ? await verificarPagoPaypal(pedido, referencia)
-          : await verificarPagoMercadoPago(pedido, referencia);
-
+      const resultado = await verificarPagoPaypal(mapPedido(row), referencia);
       if (resultado.pagado) {
         await db.run(
           "UPDATE pedido SET estado_pago = 'pagado', referencia_pago = ?, fecha_pago = ? WHERE id = ? AND estado_pago = 'pendiente'",
           resultado.referencia, ahoraSQL(), row.id
         );
+      } else if (resultado.rechazado) {
+        // PayPal no cobró (no aprobó o rechazó la tarjeta/cuenta): el pedido se cancela y el stock regresa.
+        await cancelarPedidoYRestaurarStock(row.id, 'cancelado');
       }
       return mapPedido(await db.get('SELECT * FROM pedido WHERE id = ?', row.id));
+    },
+
+    // Mercado Pago (Checkout API, formulario propio): recibe el TOKEN de la tarjeta que generó
+    // el navegador y cobra el pedido. Se puede reintentar con otra tarjeta mientras siga pendiente.
+    pagarConTarjetaMP: async (_p, { pedidoId, input }, ctx) => {
+      const row = await pedidoPropio(ctx, pedidoId);
+      if (row.metodo_pago !== 'mercadopago') {
+        throw new GraphQLError('Este pedido no se paga con Mercado Pago.');
+      }
+      if (row.estado_pago === 'pagado') throw new GraphQLError('Este pedido ya está pagado.');
+      if (row.estado_pago === 'cancelado' || row.estado === 'cancelado') {
+        throw new GraphQLError('Este pedido fue cancelado. Vuelve a hacer tu compra.');
+      }
+
+      let cobro;
+      try {
+        cobro = await cobrarConTarjetaMercadoPago(mapPedido(row), input);
+      } catch (err) {
+        // Error con Mercado Pago (token inválido, configuración, red): el pedido NO se queda vivo.
+        await cancelarPedidoYRestaurarStock(row.id, 'cancelado');
+        throw new GraphQLError(err.message);
+      }
+
+      if (cobro.aprobado) {
+        await db.run(
+          "UPDATE pedido SET estado_pago = 'pagado', referencia_pago = ?, fecha_pago = ? WHERE id = ? AND estado_pago = 'pendiente'",
+          cobro.referencia, ahoraSQL(), row.id
+        );
+      } else {
+        // Rechazado o pendiente: el pedido NO se completa. Se cancela y el stock se devuelve.
+        // Si el cliente prueba con otra tarjeta, el checkout crea un pedido nuevo.
+        await db.run('UPDATE pedido SET referencia_pago = ? WHERE id = ?', cobro.referencia, row.id);
+        await cancelarPedidoYRestaurarStock(row.id, 'cancelado');
+      }
+
+      return {
+        estadoPasarela: cobro.estadoPasarela,
+        aprobado: cobro.aprobado,
+        mensaje: cobro.mensaje,
+        pedido: mapPedido(await db.get('SELECT * FROM pedido WHERE id = ?', row.id)),
+      };
     },
 
     cancelarPago: async (_p, { pedidoId }, ctx) => {

@@ -78,6 +78,24 @@ export const typeDefs = /* GraphQL */ `
     referencia: String
   }
 
+  input PagoTarjetaMPInput {
+    "Token de un solo uso que genera MercadoPago.js (Secure Fields) en el navegador"
+    token: String!
+    "visa, master, amex..."
+    metodoPagoId: String!
+    cuotas: Int
+    emisorId: String
+  }
+
+  "Resultado de cobrar con tarjeta vía Mercado Pago (Checkout API)."
+  type PagoTarjetaResultado {
+    "approved | rejected | in_process | pending"
+    estadoPasarela: String!
+    aprobado: Boolean!
+    mensaje: String!
+    pedido: Pedido!
+  }
+
   # ---- Dashboard de administrador ----
   type ResumenVentas {
     ingresosTotales: Float!
@@ -185,8 +203,10 @@ export const typeDefs = /* GraphQL */ `
     crearPedido(input: CrearPedidoInput!): Pedido!
     actualizarEstadoPedido(id: ID!, estado: String!): Pedido!
 
-    "Métodos de cobro — crea la orden/preferencia en PayPal o Mercado Pago y devuelve la URL de pago."
+    "Métodos de cobro — crea la orden en PayPal y devuelve la URL de pago."
     iniciarPago(pedidoId: ID!): PagoInicio!
+    "Mercado Pago (formulario propio) — cobra el pedido con el token de la tarjeta; el monto sale de la base de datos."
+    pagarConTarjetaMP(pedidoId: ID!, input: PagoTarjetaMPInput!): PagoTarjetaResultado!
     "Métodos de cobro — al volver de la pasarela, verifica el pago con ella y marca el pedido como pagado."
     confirmarPago(pedidoId: ID!, referencia: String): Pedido!
     "Métodos de cobro — el cliente canceló o el pago falló: cancela el pedido y devuelve el stock."

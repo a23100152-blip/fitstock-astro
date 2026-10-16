@@ -187,3 +187,58 @@
   font-size: 2rem;
   margin: 0 auto 16px;
 }
+
+/* ---- Formulario propio de Mercado Pago (Checkout API) ---- */
+.mpBox {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 20px;
+  background: var(--color-surface-alt);
+}
+.mpHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.mpLogo { font-family: var(--font-display); font-size: 1.25rem; font-weight: 800; color: #ffe600; }
+.mpLock { font-size: 0.78rem; color: var(--color-text-dim); }
+.mpDemo {
+  background: #2e1f0a;
+  border: 1px dashed var(--color-danger);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  margin: 0 0 14px;
+}
+.mpBrand {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+/* Contenedor donde MercadoPago.js monta el iframe seguro: lo vestimos igual que un <input> nuestro */
+.mpIframe {
+  height: 42px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+.mpIframe:focus-within { border-color: var(--color-primary); }
+.fieldError .mpIframe { border-color: var(--color-danger); }
+.mpSaved {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: var(--color-surface-alt);
+}

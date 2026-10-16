@@ -52,19 +52,30 @@ Con ambos corriendo, abre `http://localhost:4321` en el navegador.
 
 ## Métodos de cobro (PayPal + Mercado Pago) y Dashboard de administrador
 
-### Pagar con PayPal / Mercado Pago
-En el checkout (paso "Pago") ahora hay 4 métodos: tarjeta, **PayPal**, **Mercado Pago** y transferencia.
+### Mercado Pago con interfaz propia (Checkout API + Secure Fields)
+Mercado Pago ofrece dos formas de integrarse: **Checkout Pro** (te redirige a su pantalla de pago ya diseñada) y
+**Checkout API** (tú diseñas el formulario). Este proyecto usa **Checkout API**: el cliente nunca sale de FitStock.
 
-1. Al confirmar, se crea el pedido en estado de pago `pendiente` (el stock queda reservado).
-2. El backend crea la orden (PayPal) o preferencia (Mercado Pago) y el cliente es redirigido a la pasarela.
-3. Al volver a `/pago/retorno`, el backend **consulta a la pasarela** si el pago es real y coincide con el pedido y el monto. Solo entonces queda `pagado` y se vacía el carrito.
-4. Si el cliente cancela, el pedido se cancela y el stock se devuelve. Un pedido sin pagar por más de 30 min se cancela solo.
+1. El formulario de tarjeta (`front/src/components/checkout/MercadoPagoForm.jsx`) es de FitStock: nombre del titular,
+   número, vencimiento, CVV y selector de pagos/cuotas, con nuestros colores y validaciones.
+2. Número, vencimiento y CVV son *Secure Fields* de MercadoPago.js (iframes con nuestro estilo): por seguridad PCI esos
+   datos nunca pasan por nuestro código. Al continuar se obtiene un **token** de un solo uso.
+3. Al confirmar, se crea el pedido `pendiente` (stock reservado) y el front manda **solo el token** a la mutation
+   `pagarConTarjetaMP`. El backend hace `POST /v1/payments` con el monto **tomado de la base de datos** (nunca del navegador).
+4. Aprobado → `pagado` y se vacía el carrito. Rechazado → el pedido sigue reservado y el cliente prueba otra tarjeta.
+   Un pedido sin pagar por más de 30 min se cancela solo (stock devuelto).
 
-**Modo simulado (por defecto):** sin credenciales, las dos pasarelas usan una pantalla de pago de demostración (`/pago/simulado`) para probar todo el flujo sin cuentas de desarrollador.
+### Pagar con PayPal (redirección)
+Al confirmar, el backend crea la orden y el cliente es redirigido a PayPal; al volver a `/pago/retorno` el backend
+**consulta a PayPal** y solo entonces marca `pagado`.
 
-**Modo real (sandbox):** copia `back/.env.example` a `back/.env`, pon tus credenciales de prueba
-(`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `MP_ACCESS_TOKEN`) y reinicia el backend. Al arrancar verás
-`PayPal: real · Mercado Pago: real`. Para Mercado Pago paga con un *usuario comprador de prueba* y sus tarjetas de prueba.
+**Modo simulado (por defecto):** sin credenciales, PayPal usa una pantalla de demostración (`/pago/simulado`) y el formulario de
+Mercado Pago usa campos normales (tarjeta de 16 dígitos; si termina en `0000` simula un rechazo).
+
+**Modo real (sandbox) de Mercado Pago:** en `back/.env` pon `MP_ACCESS_TOKEN` (Access Token de prueba, secreto) y en
+`front/.env` pon `PUBLIC_MP_PUBLIC_KEY` (Public Key de prueba, `TEST-...`). Reinicia ambos. Paga con las
+[tarjetas de prueba de Mercado Pago](https://www.mercadopago.com.mx/developers/es/docs/checkout-api-payments/additional-content/your-integrations/test/cards).
+Para PayPal: `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET`.
 
 ### Dashboard de administrador
 Entra con `admin@fitstock.com` / `Admin1234` y abre **📊 Panel admin** (o `/admin`). Muestra ingresos, pedidos,

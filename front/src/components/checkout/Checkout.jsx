@@ -1,7 +1,7 @@
 // Checkout.jsx — Orquestador del Checkout: máquina de estados de 3 pasos
 // (envío → pago → revisión) + confirmación. Es la parte que me toca entregar
 // completa y lista para producción.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import styles from './Checkout.module.css';
 import ShippingStep, { validarEnvio } from './ShippingStep.jsx';
 import PaymentStep, { validarPago } from './PaymentStep.jsx';
@@ -15,11 +15,13 @@ import {
   MUTATION_CREAR_PEDIDO,
   MUTATION_INICIAR_PAGO,
   MUTATION_CANCELAR_PAGO,
+  MUTATION_PAGAR_TARJETA_MP,
 } from '../../api/client.js';
+import { useCartTotals } from '../../hooks/useCartTotals.js';
 
 const PASOS = ['envio', 'pago', 'revision'];
 const PASO_LABEL = { envio: 'Envío', pago: 'Pago', revision: 'Revisión' };
-const NOMBRE_PASARELA = { paypal: 'PayPal', mercadopago: 'Mercado Pago' };
+const NOMBRE_PASARELA = { paypal: 'PayPal' }; // pasarelas que REDIRIGEN. Mercado Pago se paga aquí mismo.
 
 export default function Checkout({ usuario }) {
   const items = useCartStore((s) => s.items);
@@ -33,7 +35,13 @@ export default function Checkout({ usuario }) {
   const [datos, setDatos] = useState({
     nombreContacto: usuario?.nombre ?? '', emailContacto: usuario?.email ?? '', calle: '', numero: '', ciudad: '', estado: '', cp: '', pais: 'México', telefono: '',
     metodoPago: 'tarjeta', nombreTarjeta: '', numeroTarjeta: '', vencimiento: '', cvv: '',
+    mpPago: null, // token de tarjeta de Mercado Pago ya generado (nunca el número de tarjeta)
   });
+  const mpRef = useRef(null);
+  const { totalConEnvio } = useCartTotals();
+  const [validando, setValidando] = useState(false);
+  // Pedido ya creado y pendiente de pago (para reintentar con otra tarjeta sin duplicar pedidos)
+  const [pedidoPendiente, setPedidoPendiente] = useState(null);
   const [errores, setErrores] = useState({});
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState(null);
@@ -49,10 +57,23 @@ export default function Checkout({ usuario }) {
     if (Object.keys(errs).length === 0) setPaso('pago');
   };
 
-  const irARevision = () => {
+  const irARevision = async () => {
     const errs = validarPago(datos);
     setErrores(errs);
-    if (Object.keys(errs).length === 0) setPaso('revision');
+    if (Object.keys(errs).length > 0) return;
+
+    // Mercado Pago: aquí se valida la tarjeta y se obtiene el token (solo el token sale del navegador).
+    if (datos.metodoPago === 'mercadopago' && !datos.mpPago) {
+      setValidando(true);
+      try {
+        const mpPago = await mpRef.current?.tokenizar();
+        if (!mpPago) return; // el formulario ya muestra qué campo corregir
+        onChange('mpPago', mpPago);
+      } finally {
+        setValidando(false);
+      }
+    }
+    setPaso('revision');
   };
 
   const confirmarPedido = async () => {
@@ -76,7 +97,53 @@ export default function Checkout({ usuario }) {
         items: items.map((i) => ({ productoId: i.id, cantidad: i.cantidad })),
       };
 
-      const data = await graphqlRequest(MUTATION_CREAR_PEDIDO, { input });
+      // Si quedó un pedido pendiente de un intento anterior, se reutiliza solo si sigue siendo con Mercado Pago;
+      // si el cliente cambió de método, se cancela (devuelve stock) y se crea uno nuevo.
+      let pedidoId;
+      let pedidoCreado = null;
+      if (pedidoPendiente && datos.metodoPago === 'mercadopago') {
+        pedidoId = pedidoPendiente;
+      } else {
+        if (pedidoPendiente) {
+          await graphqlRequest(MUTATION_CANCELAR_PAGO, { pedidoId: pedidoPendiente }).catch(() => {});
+          setPedidoPendiente(null);
+        }
+        const data = await graphqlRequest(MUTATION_CREAR_PEDIDO, { input });
+        pedidoId = data.crearPedido.id;
+        pedidoCreado = data.crearPedido;
+      }
+
+      // Mercado Pago (formulario propio): se cobra con el token, sin redirigir a ningún lado.
+      if (datos.metodoPago === 'mercadopago') {
+        setPedidoPendiente(pedidoId);
+        setTextoEnviando('Procesando pago…');
+        const { pagarConTarjetaMP: res } = await graphqlRequest(MUTATION_PAGAR_TARJETA_MP, {
+          pedidoId,
+          input: {
+            token: datos.mpPago.token,
+            metodoPagoId: datos.mpPago.metodoPagoId,
+            cuotas: datos.mpPago.cuotas,
+            emisorId: datos.mpPago.emisorId,
+          },
+        });
+
+        // SOLO un pago APROBADO completa el pedido.
+        setPedidoPendiente(null);
+        if (res.aprobado) {
+          setPedidoConfirmado(res.pedido);
+          vaciarCarrito();
+          showToast('¡Pago aprobado!');
+        } else {
+          // Rechazado o pendiente: el backend ya canceló ese pedido y devolvió el stock.
+          // El token ya se gastó, así que hay que capturar la tarjeta otra vez.
+          setDatos((prev) => ({ ...prev, mpPago: null }));
+          setErrores({ mp: res.mensaje });
+          setPaso('pago');
+          showToast('Pago rechazado', 'error');
+        }
+        return;
+      }
+      const data = { crearPedido: pedidoCreado };
 
       // PayPal / Mercado Pago: el pedido queda "pendiente de pago" y mandamos al cliente a la pasarela.
       // El carrito NO se vacía aquí: se vacía en /pago/retorno cuando el pago se confirma.
@@ -99,6 +166,15 @@ export default function Checkout({ usuario }) {
       vaciarCarrito();
       showToast('¡Pedido registrado con éxito!');
     } catch (err) {
+      if (datos.metodoPago === 'mercadopago') {
+        // Si falló el cobro, el backend ya canceló el pedido: se vuelve a capturar la tarjeta.
+        setPedidoPendiente(null);
+        setDatos((prev) => ({ ...prev, mpPago: null }));
+        setErrores({ mp: err.message || 'No se pudo procesar el pago. Intenta de nuevo.' });
+        setPaso('pago');
+        showToast('No se pudo completar el pago', 'error');
+        return;
+      }
       setErrorEnvio(err.message || 'No se pudo registrar el pedido. Intenta de nuevo.');
       showToast('No se pudo completar el pedido', 'error');
     } finally {
@@ -149,6 +225,9 @@ export default function Checkout({ usuario }) {
         )}
         {paso === 'pago' && (
           <PaymentStep
+            mpRef={mpRef}
+            total={totalConEnvio}
+            validando={validando}
             datos={datos}
             errores={errores}
             onChange={onChange}

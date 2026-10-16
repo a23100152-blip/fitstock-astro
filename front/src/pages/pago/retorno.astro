@@ -1,5 +1,5 @@
 ---
-// /pago/retorno — A esta página regresa el cliente desde PayPal o Mercado Pago.
+// /pago/retorno — A esta página regresa el cliente desde PayPal (Mercado Pago ya no redirige: se paga en el checkout).
 // IMPORTANTE: no se confía en lo que diga la URL. Aquí solo se leen los
 // identificadores y se le pide al backend que VERIFIQUE el pago con la pasarela
 // (mutation confirmarPago). Solo si la pasarela lo confirma, el pedido queda "pagado".
@@ -17,7 +17,7 @@ const resultado = q.get('resultado'); // exito | pendiente | fallido | cancelado
 // PayPal regresa ?token=<id de la orden>; Mercado Pago regresa ?payment_id=<id del pago>
 const referencia = metodo === 'paypal' ? q.get('token') : (q.get('payment_id') ?? q.get('collection_id'));
 
-if (!['paypal', 'mercadopago'].includes(metodo ?? '') || !/^\d+$/.test(pedidoId ?? '')) {
+if (!['paypal'].includes(metodo ?? '') || !/^\d+$/.test(pedidoId ?? '')) {
   return Astro.redirect('/');
 }
 
@@ -46,7 +46,8 @@ try {
       token
     );
     pedido = data.confirmarPago;
-    estado = pedido.estadoPago === 'pagado' ? 'pagado' : 'pendiente';
+    // pagado = PayPal cobró · cancelado = PayPal rechazó o no se aprobó (el backend ya devolvió el stock)
+    estado = pedido.estadoPago === 'pagado' ? 'pagado' : pedido.estadoPago === 'cancelado' ? 'cancelado' : 'pendiente';
   }
 } catch (err: any) {
   mensajeError = err.message;

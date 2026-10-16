@@ -36,6 +36,7 @@ export async function liberarPedidosAbandonados() {
     `SELECT id FROM pedido
       WHERE estado_pago = 'pendiente' AND estado <> 'cancelado'
         AND metodo_pago IN (${marcas})
+        AND NOT (metodo_pago = 'mercadopago' AND referencia_pago IS NOT NULL) -- pago en revisión: no se cancela solo
         AND fecha_creacion < datetime('now', ?)`,
     ...METODOS_CON_PASARELA,
     `-${MINUTOS_LIMITE} minutes`

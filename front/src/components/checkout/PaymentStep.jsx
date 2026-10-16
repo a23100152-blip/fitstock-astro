@@ -1,10 +1,12 @@
 // PaymentStep.jsx — Paso 2 del Checkout: método de pago.
 // Métodos de cobro:
-//  - PayPal y Mercado Pago: pasarelas reales (sandbox) — al confirmar el pedido se
-//    redirige al cliente a la pasarela y se verifica el pago al regresar.
+//  - Mercado Pago: formulario de tarjeta PROPIO (Checkout API + Secure Fields), sin salir
+//    de FitStock. Ver MercadoPagoForm.jsx.
+//  - PayPal: pasarela real (sandbox) — se redirige al cliente y se verifica el pago al regresar.
 //  - Tarjeta: sigue siendo un cobro simulado (solo valida el formato).
 //  - Transferencia: queda pendiente hasta que el administrador confirma el depósito.
 import styles from './Checkout.module.css';
+import MercadoPagoForm from './MercadoPagoForm.jsx';
 
 const METODOS = [
   { id: 'tarjeta', label: 'Tarjeta de crédito/débito', icono: '💳' },
@@ -36,7 +38,7 @@ export function validarPago(datos) {
   return errores;
 }
 
-export default function PaymentStep({ datos, errores, onChange, onContinuar, onRegresar }) {
+export default function PaymentStep({ datos, errores, onChange, onContinuar, onRegresar, mpRef, total, validando }) {
   const campo = (name) => ({
     value: datos[name] || '',
     onChange: (e) => onChange(name, e.target.value),
@@ -97,9 +99,23 @@ export default function PaymentStep({ datos, errores, onChange, onContinuar, onR
         </p>
       )}
       {datos.metodoPago === 'mercadopago' && (
-        <p style={{ color: 'var(--color-text-dim)', fontSize: '0.9rem' }}>
-          Al confirmar tu pedido te llevaremos a Mercado Pago, donde puedes pagar con tarjeta, saldo en cuenta o efectivo. Al terminar regresarás a FitStock.
-        </p>
+        <>
+          {errores.mp && <p className={styles.errorText} style={{ marginBottom: 12 }}>⚠ {errores.mp}</p>}
+          {datos.mpPago ? (
+            <div className={styles.mpSaved}>
+              <span>
+                🤝 Tarjeta <strong>{datos.mpPago.metodoPagoId?.toUpperCase()}</strong> terminación{' '}
+                <strong>{datos.mpPago.ultimos4}</strong>
+                {datos.mpPago.cuotas > 1 ? ` · ${datos.mpPago.cuotas} pagos` : ''}
+              </span>
+              <button type="button" className="btn btn-secondary" onClick={() => onChange('mpPago', null)}>
+                Cambiar
+              </button>
+            </div>
+          ) : (
+            <MercadoPagoForm ref={mpRef} total={total} errores={errores} />
+          )}
+        </>
       )}
       {datos.metodoPago === 'transferencia' && (
         <p style={{ color: 'var(--color-text-dim)', fontSize: '0.9rem' }}>
@@ -109,7 +125,9 @@ export default function PaymentStep({ datos, errores, onChange, onContinuar, onR
 
       <div className={styles.actions}>
         <button type="button" className="btn btn-secondary" onClick={onRegresar}>← Regresar</button>
-        <button type="button" className="btn btn-primary" onClick={onContinuar}>Revisar pedido →</button>
+        <button type="button" className="btn btn-primary" onClick={onContinuar} disabled={validando}>
+          {validando ? 'Validando tarjeta…' : 'Revisar pedido →'}
+        </button>
       </div>
     </div>
   );

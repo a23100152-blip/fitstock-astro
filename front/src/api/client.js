@@ -89,3 +89,28 @@ export const MUTATION_CANCELAR_PAGO = /* GraphQL */ `
     }
   }
 `;
+
+// ---- Mercado Pago (Checkout API, formulario propio) ----
+export const MUTATION_PAGAR_TARJETA_MP = /* GraphQL */ `
+  mutation PagarConTarjetaMP($pedidoId: ID!, $input: PagoTarjetaMPInput!) {
+    pagarConTarjetaMP(pedidoId: $pedidoId, input: $input) {
+      estadoPasarela
+      aprobado
+      mensaje
+      pedido {
+        id
+        subtotal
+        envio
+        total
+        estado
+        estadoPago
+        fechaCreacion
+        nombreContacto
+        emailContacto
+        metodoPago
+        direccion { calle numero ciudad estado cp }
+        detalles { cantidad precioUnitario subtotal producto { nombre } }
+      }
+    }
+  }
+`;

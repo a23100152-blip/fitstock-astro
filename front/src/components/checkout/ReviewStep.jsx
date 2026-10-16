@@ -11,7 +11,7 @@ const METODO_LABEL = {
 
 const etiquetaConfirmar = (metodo) =>
   metodo === 'paypal' ? 'Confirmar y pagar con PayPal'
-  : metodo === 'mercadopago' ? 'Confirmar y pagar con Mercado Pago'
+  : metodo === 'mercadopago' ? 'Pagar con Mercado Pago'
   : 'Confirmar y pagar';
 
 export default function ReviewStep({ datos, onRegresar, onConfirmar, enviando, textoEnviando, errorEnvio }) {
@@ -33,6 +33,10 @@ export default function ReviewStep({ datos, onRegresar, onConfirmar, enviando, t
         <h4>Pago</h4>
         <p style={{ margin: 0 }}>
           {METODO_LABEL[datos.metodoPago]}
+          {datos.metodoPago === 'mercadopago' && datos.mpPago && (
+            <> · {datos.mpPago.metodoPagoId?.toUpperCase()} terminación {datos.mpPago.ultimos4}
+              {datos.mpPago.cuotas > 1 ? ` · ${datos.mpPago.cuotas} pagos` : ''}</>
+          )}
           {datos.metodoPago === 'tarjeta' && datos.numeroTarjeta && (
             <> · terminación {datos.numeroTarjeta.replace(/\s/g, '').slice(-4)}</>
           )}
