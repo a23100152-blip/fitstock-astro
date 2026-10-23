@@ -1,0 +1,17 @@
+---
+// /admin/productos — Módulo de catálogo del BackOffice.
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import ProductosAdmin from '../../components/backoffice/ProductosAdmin.jsx';
+import { backendGraphQL } from '../../lib/backend.js';
+
+const { productos, categorias } = await backendGraphQL(
+  '{ productos { id nombre descripcion precio stock imagenUrl infoNutricional categoria { id nombre } } categorias { id nombre icono } }'
+);
+---
+<Layout title="Productos — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="productos" titulo="📦 Productos" descripcion="Alta, edición y baja del catálogo, con movimientos de stock que quedan en el kardex." />
+    <ProductosAdmin client:load inicial={productos} categorias={categorias} />
+  </section>
+</Layout>

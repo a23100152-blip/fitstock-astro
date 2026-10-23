@@ -4,7 +4,7 @@
 // independiente en back/). Esto es justo lo que separa "frontend" de
 // "backend": si este archivo desapareciera, Astro se quedaría sin forma de
 // leer o escribir ningún dato.
-const BACKEND_URL = import.meta.env.BACKEND_URL || 'http://localhost:4000';
+export const BACKEND_URL = import.meta.env.BACKEND_URL || 'http://localhost:4000';
 
 export async function backendGraphQL(query, variables = {}, token = null) {
   const headers = { 'Content-Type': 'application/json' };

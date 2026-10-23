@@ -85,3 +85,13 @@ Solo cuentan como venta los pedidos **pagados** y no cancelados.
 
 Para tener datos de ejemplo: `cd back && npm run seed:demo` (crea ~50 pedidos de los últimos 45 días; es repetible).
 `npm run db:reset` deja la base limpia.
+
+## Full BackOffice (ERP) con GraphQL Subscriptions
+
+El panel `/admin` ahora es un **BackOffice tipo ERP** con módulos de Pedidos,
+Productos, Inventario (kardex), Categorías, Usuarios y Actividad en vivo
+(bitácora). Los cambios llegan **en tiempo real** por GraphQL Subscriptions
+(`eventoBackoffice`, `pedidoActualizado`, `stockActualizado`) vía SSE.
+
+La base de datos se migra sola al arrancar el backend (también en Turso).
+Detalle completo, qué es un ERP y cómo probarlo: **[BACKOFFICE.md](BACKOFFICE.md)**.

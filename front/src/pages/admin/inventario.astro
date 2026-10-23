@@ -1,0 +1,21 @@
+---
+// /admin/inventario — Kardex de inventario del BackOffice.
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import InventarioAdmin from '../../components/backoffice/InventarioAdmin.jsx';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const { movimientosInventario, productos } = await backendGraphQL(
+  `{ movimientosInventario(limite: 200) { id tipo cantidad stockResultante motivo usuario pedidoId fecha producto { id nombre } }
+     productos { id nombre stock } }`,
+  {},
+  token
+);
+---
+<Layout title="Inventario — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="inventario" titulo="🏷️ Inventario" descripcion="Kardex: historial de cada entrada y salida de stock, con quién la hizo y por qué." />
+    <InventarioAdmin client:load inicial={movimientosInventario} productos={productos} />
+  </section>
+</Layout>

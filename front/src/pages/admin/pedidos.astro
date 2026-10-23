@@ -1,0 +1,20 @@
+---
+// /admin/pedidos — Módulo de pedidos del BackOffice (ventas).
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import PedidosAdmin from '../../components/backoffice/PedidosAdmin.jsx';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const { pedidos } = await backendGraphQL(
+  '{ pedidos(limite: 200) { id nombreContacto emailContacto metodoPago total estado estadoPago fechaCreacion } }',
+  {},
+  token
+);
+---
+<Layout title="Pedidos — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="pedidos" titulo="🧾 Pedidos" descripcion="Gestiona el ciclo de venta: pago, envío y cancelaciones. Los pedidos nuevos aparecen solos." />
+    <PedidosAdmin client:load inicial={pedidos} />
+  </section>
+</Layout>

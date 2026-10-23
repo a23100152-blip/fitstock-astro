@@ -36,7 +36,7 @@ const path = Astro.url.pathname;
           {user ? (
             <>
               <span class="topbar-user">Hola, {user.nombre.split(' ')[0]}</span>
-              {user.rol === 'admin' && <a class="topbar-link topbar-link-admin" href="/admin">📊 Panel admin</a>}
+              {user.rol === 'admin' && <a class="topbar-link topbar-link-admin" href="/admin">🗂️ BackOffice</a>}
               <a class="topbar-link" href="/pedidos">Mis pedidos</a>
               <a class="topbar-link" href="/cuenta">Mi cuenta</a>
               <form class="inline-form" method="POST" action="/api/auth/logout">

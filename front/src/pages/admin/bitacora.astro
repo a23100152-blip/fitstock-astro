@@ -1,0 +1,22 @@
+---
+// /admin/bitacora — Actividad en vivo: bitácora de auditoría por GraphQL Subscription.
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import ActividadEnVivo from '../../components/backoffice/ActividadEnVivo.jsx';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const { bitacora } = await backendGraphQL(
+  '{ bitacora(limite: 100) { id accion entidad entidadId mensaje usuario fecha } }',
+  {},
+  token
+);
+---
+<Layout title="Actividad en vivo — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="bitacora" titulo="📡 Actividad en vivo" descripcion="Bitácora de auditoría: quién hizo qué y cuándo. Llega en tiempo real por GraphQL Subscription (SSE)." />
+    <div class="dash-card">
+      <ActividadEnVivo client:load inicial={bitacora} limite={100} />
+    </div>
+  </section>
+</Layout>

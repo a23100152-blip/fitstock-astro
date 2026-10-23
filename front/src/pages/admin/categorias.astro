@@ -1,0 +1,15 @@
+---
+// /admin/categorias — Módulo de categorías del BackOffice.
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import CategoriasAdmin from '../../components/backoffice/CategoriasAdmin.jsx';
+import { backendGraphQL } from '../../lib/backend.js';
+
+const { categorias } = await backendGraphQL('{ categorias { id nombre descripcion icono productos { id stock } } }');
+---
+<Layout title="Categorías — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="categorias" titulo="🗂️ Categorías" descripcion="Organiza el catálogo. Una categoría solo se elimina cuando ya no tiene productos." />
+    <CategoriasAdmin client:load inicial={categorias} />
+  </section>
+</Layout>

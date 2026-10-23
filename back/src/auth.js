@@ -32,7 +32,7 @@ export async function usuarioPorToken(token) {
   const row = await db.get(
     `SELECT u.id, u.nombre, u.email, u.rol, s.expira_en
        FROM sesion s JOIN usuario u ON u.id = s.usuario_id
-      WHERE s.token_hash = ?`,
+      WHERE s.token_hash = ? AND u.activo = 1`, // una cuenta desactivada desde el BackOffice pierde la sesión
     sha256(token)
   );
   if (!row) return null;
@@ -85,6 +85,7 @@ export async function registrarUsuarioDb({ nombre, email, password }) {
 export async function autenticar(email, password) {
   const row = await db.get('SELECT * FROM usuario WHERE email = ?', (email || '').trim().toLowerCase());
   if (!row || !verifyPassword(password || '', row.password_hash)) return null;
+  if (Number(row.activo) === 0) return { desactivado: true };
   return Number(row.id);
 }
 
@@ -119,6 +120,11 @@ export async function limpiarIntentos(email) {
 // ---- Cuenta: editar nombre y cambiar contraseña ----
 export async function actualizarNombreDb(usuarioId, nombre) {
   await db.run('UPDATE usuario SET nombre = ? WHERE id = ?', nombre.trim(), usuarioId);
+}
+
+// BackOffice: cierra TODAS las sesiones de un usuario (al desactivarlo o restablecer su contraseña).
+export async function cerrarTodasLasSesiones(usuarioId) {
+  await db.run('DELETE FROM sesion WHERE usuario_id = ?', Number(usuarioId));
 }
 
 export async function cerrarOtrasSesiones(usuarioId, tokenActual) {

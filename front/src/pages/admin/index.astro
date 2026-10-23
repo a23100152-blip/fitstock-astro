@@ -7,6 +7,8 @@ import KpiCard from '../../components/admin/KpiCard.astro';
 import LineChart from '../../components/admin/LineChart.astro';
 import DonutChart from '../../components/admin/DonutChart.astro';
 import BarList from '../../components/admin/BarList.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import ActividadEnVivo from '../../components/backoffice/ActividadEnVivo.jsx';
 import { backendGraphQL, COOKIE } from '../../lib/backend.js';
 import {
   METODO_LABEL, METODO_COLOR, ESTADO_PAGO_LABEL, ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, mxn, fechaCorta,
@@ -20,7 +22,7 @@ const dias = RANGOS.includes(pedido) ? pedido : 30;
 const ok = Astro.url.searchParams.get('ok');
 const error = Astro.url.searchParams.get('error');
 
-const { estadisticasAdmin: e } = await backendGraphQL(
+const { estadisticasAdmin: e, bitacora } = await backendGraphQL(
   `query($dias: Int) {
     estadisticasAdmin(dias: $dias) {
       dias desde hasta
@@ -36,6 +38,7 @@ const { estadisticasAdmin: e } = await backendGraphQL(
       stockBajo { id nombre stock categoria { nombre } }
       pedidosRecientes { id nombreContacto metodoPago total estado estadoPago fechaCreacion }
     }
+    bitacora(limite: 8) { id accion entidad entidadId mensaje usuario fecha }
   }`,
   { dias },
   token
@@ -69,9 +72,9 @@ const volver = `/admin?dias=${dias}`;
 ---
 <Layout title="Panel de administración — FitStock">
   <section class="section dash">
+    <AdminNav actual="dashboard" titulo="📊 Dashboard" descripcion="Indicadores de ventas, inventario y actividad del negocio en un solo lugar." />
     <header class="dash-head">
       <div>
-        <h2>📊 Panel de administración</h2>
         <p class="dash-sub">Ventas del {fechaCorta(e.desde)} al {fechaCorta(e.hasta)} · solo cuentan pedidos <strong>pagados</strong> y no cancelados</p>
       </div>
       <nav class="dash-rangos" aria-label="Periodo">
@@ -117,6 +120,11 @@ const volver = `/admin?dias=${dias}`;
       <article class="dash-card">
         <h3>Pedidos por estado</h3>
         <BarList items={porEstado} />
+      </article>
+
+      <article class="dash-card dash-ancho">
+        <h3>📡 Actividad en vivo <small>· <a href="/admin/bitacora">ver bitácora completa</a></small></h3>
+        <ActividadEnVivo client:load inicial={bitacora} compacto limite={20} />
       </article>
 
       <article class="dash-card dash-ancho">

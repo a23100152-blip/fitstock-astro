@@ -72,7 +72,55 @@ async function migrarPedidoConMetodosDeCobro() {
   `);
 }
 
+// BackOffice (ERP): tablas y columna nuevas. Es idempotente, así que corre en cada
+// arranque: crea lo que falte en bases que ya existían (incluida la de Turso) sin tocar datos.
+async function migrarBackoffice() {
+  const columnas = await client.execute('PRAGMA table_info(usuario)');
+  if (!columnas.rows.some((c) => c.name === 'activo')) {
+    console.log('🔧 Migrando tabla usuario (BackOffice: columna activo)...');
+    await client.execute('ALTER TABLE usuario ADD COLUMN activo INTEGER NOT NULL DEFAULT 1');
+  }
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS movimiento_inventario (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      producto_id      INTEGER NOT NULL,
+      tipo             TEXT NOT NULL CHECK (tipo IN ('inicial', 'entrada', 'salida', 'ajuste', 'venta', 'devolucion')),
+      cantidad         INTEGER NOT NULL,
+      stock_resultante INTEGER NOT NULL,
+      motivo           TEXT,
+      usuario_id       INTEGER,
+      pedido_id        INTEGER,
+      fecha            TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (producto_id) REFERENCES producto(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimiento_inventario(producto_id, id);
+    CREATE TABLE IF NOT EXISTS bitacora (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      accion      TEXT NOT NULL,
+      entidad     TEXT NOT NULL,
+      entidad_id  INTEGER,
+      mensaje     TEXT NOT NULL,
+      usuario_id  INTEGER,
+      usuario     TEXT,
+      fecha       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_bitacora_fecha ON bitacora(id DESC);
+  `);
+  // Kardex: cada producto arranca con un movimiento "inicial" igual a su stock actual.
+  await client.execute(`
+    INSERT INTO movimiento_inventario (producto_id, tipo, cantidad, stock_resultante, motivo)
+    SELECT id, 'inicial', stock, stock, 'Inventario inicial'
+      FROM producto
+     WHERE id NOT IN (SELECT producto_id FROM movimiento_inventario)
+  `);
+}
+
 async function inicializar() {
+  await crearOMigrar();
+  await migrarBackoffice();
+}
+
+async function crearOMigrar() {
   const existe = await client.execute(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'usuario'"
   );

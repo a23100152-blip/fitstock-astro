@@ -2,20 +2,28 @@
 // cancelar (devolviendo el stock) y liberar pedidos que nunca se pagaron.
 import { db } from './db.js';
 import { METODOS_CON_PASARELA } from './pagos.js';
+import { registrarMovimiento } from './inventario.js';
+import { notificarPedido, notificarStock } from './eventos.js';
 
 // "YYYY-MM-DD HH:MM:SS" en UTC: el mismo formato que datetime('now') de SQLite.
 export const ahoraSQL = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
 // Cancela el pedido y regresa al inventario lo que se había reservado, en una sola transacción.
 // `estadoPagoFinal`: 'cancelado' cuando el cobro nunca se completó; null para no tocar el estado del pago.
-export async function cancelarPedidoYRestaurarStock(pedidoId, estadoPagoFinal = 'cancelado') {
-  return db.transaccion(async (tx) => {
+export async function cancelarPedidoYRestaurarStock(pedidoId, estadoPagoFinal = 'cancelado', usuarioId = null) {
+  const productos = [];
+  const cancelado = await db.transaccion(async (tx) => {
     const pedido = await tx.get('SELECT id, estado FROM pedido WHERE id = ?', Number(pedidoId));
     if (!pedido || pedido.estado === 'cancelado') return false;
 
     const detalles = await tx.all('SELECT producto_id, cantidad FROM pedido_detalle WHERE pedido_id = ?', Number(pedidoId));
     for (const d of detalles) {
       await tx.run('UPDATE producto SET stock = stock + ? WHERE id = ?', d.cantidad, d.producto_id);
+      await registrarMovimiento(tx, {
+        productoId: d.producto_id, tipo: 'devolucion', cantidad: d.cantidad,
+        motivo: `Pedido #${pedidoId} cancelado`, usuarioId, pedidoId,
+      });
+      productos.push(d.producto_id);
     }
     if (estadoPagoFinal) {
       await tx.run("UPDATE pedido SET estado = 'cancelado', estado_pago = ? WHERE id = ?", estadoPagoFinal, Number(pedidoId));
@@ -24,6 +32,11 @@ export async function cancelarPedidoYRestaurarStock(pedidoId, estadoPagoFinal = 
     }
     return true;
   });
+  if (cancelado) {
+    await notificarPedido(pedidoId);
+    await notificarStock(...productos);
+  }
+  return cancelado;
 }
 
 // Un pedido de PayPal / Mercado Pago que nadie pagó mantiene el stock reservado.

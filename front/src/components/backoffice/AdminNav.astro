@@ -1,0 +1,28 @@
+---
+// AdminNav.astro — Menú de módulos del BackOffice (estilo ERP).
+// HTML estático: no manda JavaScript al navegador.
+interface Props { actual: string; titulo: string; descripcion?: string }
+const { actual, titulo, descripcion } = Astro.props;
+
+const MODULOS = [
+  { href: '/admin', clave: 'dashboard', icono: '📊', nombre: 'Dashboard' },
+  { href: '/admin/pedidos', clave: 'pedidos', icono: '🧾', nombre: 'Pedidos' },
+  { href: '/admin/productos', clave: 'productos', icono: '📦', nombre: 'Productos' },
+  { href: '/admin/inventario', clave: 'inventario', icono: '🏷️', nombre: 'Inventario' },
+  { href: '/admin/categorias', clave: 'categorias', icono: '🗂️', nombre: 'Categorías' },
+  { href: '/admin/usuarios', clave: 'usuarios', icono: '👥', nombre: 'Usuarios' },
+  { href: '/admin/bitacora', clave: 'bitacora', icono: '📡', nombre: 'Actividad en vivo' },
+];
+---
+<header class="bo-head">
+  <p class="bo-kicker">BackOffice · ERP FitStock</p>
+  <h2>{titulo}</h2>
+  {descripcion && <p class="bo-desc">{descripcion}</p>}
+</header>
+<nav class="bo-nav" aria-label="Módulos del BackOffice">
+  {MODULOS.map((m) => (
+    <a href={m.href} class:list={['bo-nav-item', { activo: m.clave === actual }]} aria-current={m.clave === actual ? 'page' : undefined}>
+      <span>{m.icono}</span> {m.nombre}
+    </a>
+  ))}
+</nav>

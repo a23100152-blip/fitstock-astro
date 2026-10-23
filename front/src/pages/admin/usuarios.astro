@@ -1,0 +1,21 @@
+---
+// /admin/usuarios — Módulo de usuarios del BackOffice.
+import Layout from '../../layouts/Layout.astro';
+import AdminNav from '../../components/backoffice/AdminNav.astro';
+import UsuariosAdmin from '../../components/backoffice/UsuariosAdmin.jsx';
+import { backendGraphQL, COOKIE } from '../../lib/backend.js';
+
+const token = Astro.cookies.get(COOKIE)?.value;
+const { usuarios } = await backendGraphQL(
+  '{ usuarios { id nombre email rol activo fechaCreacion totalPedidos totalGastado } }',
+  {},
+  token
+);
+const yoId = String(Astro.locals.user?.id ?? '');
+---
+<Layout title="Usuarios — BackOffice FitStock">
+  <section class="section bo">
+    <AdminNav actual="usuarios" titulo="👥 Usuarios" descripcion="Clientes y administradores: alta, roles, activación y restablecimiento de contraseña." />
+    <UsuariosAdmin client:load inicial={usuarios} yoId={yoId} />
+  </section>
+</Layout>

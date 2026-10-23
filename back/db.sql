@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS usuario (
     email          TEXT NOT NULL UNIQUE,
     password_hash  TEXT NOT NULL,
     rol            TEXT NOT NULL DEFAULT 'cliente' CHECK (rol IN ('cliente', 'admin')),
+    activo         INTEGER NOT NULL DEFAULT 1,  -- BackOffice: 0 = cuenta desactivada (no puede iniciar sesión)
     fecha_creacion TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -117,6 +118,40 @@ CREATE TABLE IF NOT EXISTS pedido_detalle (
     FOREIGN KEY (pedido_id) REFERENCES pedido(id) ON DELETE CASCADE,
     FOREIGN KEY (producto_id) REFERENCES producto(id) ON DELETE RESTRICT
 );
+
+-- ------------------------------------------------------------
+-- BackOffice (ERP): movimientos de inventario (kardex)
+-- Cada entrada o salida de stock queda registrada con su motivo.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS movimiento_inventario (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    producto_id      INTEGER NOT NULL,
+    tipo             TEXT NOT NULL CHECK (tipo IN ('inicial', 'entrada', 'salida', 'ajuste', 'venta', 'devolucion')),
+    cantidad         INTEGER NOT NULL,             -- positiva = entra, negativa = sale
+    stock_resultante INTEGER NOT NULL,
+    motivo           TEXT,
+    usuario_id       INTEGER,                      -- quién hizo el movimiento (admin o cliente que compró)
+    pedido_id        INTEGER,                      -- si el movimiento viene de un pedido
+    fecha            TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (producto_id) REFERENCES producto(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimiento_inventario(producto_id, id);
+
+-- ------------------------------------------------------------
+-- BackOffice (ERP): bitácora de auditoría
+-- Quién hizo qué y cuándo (se publica en tiempo real por GraphQL Subscription).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bitacora (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    accion      TEXT NOT NULL,      -- crear | actualizar | eliminar | stock | estado | pago | registro | pedido
+    entidad     TEXT NOT NULL,      -- producto | categoria | usuario | pedido | inventario
+    entidad_id  INTEGER,
+    mensaje     TEXT NOT NULL,
+    usuario_id  INTEGER,
+    usuario     TEXT,               -- nombre de quien lo hizo (se guarda tal cual por si se renombra)
+    fecha       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bitacora_fecha ON bitacora(id DESC);
 
 -- ============================================================
 -- Datos semilla

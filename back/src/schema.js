@@ -5,6 +5,62 @@ export const typeDefs = /* GraphQL */ `
     nombre: String!
     email: String!
     rol: String!
+    "BackOffice: false = cuenta desactivada (no puede iniciar sesión)"
+    activo: Boolean!
+    fechaCreacion: String
+    "BackOffice: pedidos pagados del usuario"
+    totalPedidos: Int!
+    "BackOffice: suma de sus pedidos pagados"
+    totalGastado: Float!
+  }
+
+  # ================= BackOffice (ERP) =================
+  "Movimiento del kardex de inventario: cada entrada o salida de stock."
+  type MovimientoInventario {
+    id: ID!
+    producto: Producto
+    "inicial | entrada | salida | ajuste | venta | devolucion"
+    tipo: String!
+    "Positiva = entra al almacén · negativa = sale"
+    cantidad: Int!
+    stockResultante: Int!
+    motivo: String
+    usuario: String
+    pedidoId: ID
+    fecha: String!
+  }
+
+  "Registro de la bitácora de auditoría (también llega en tiempo real por suscripción)."
+  type EventoBackoffice {
+    id: ID!
+    "crear | actualizar | eliminar | stock | estado | pago | registro | pedido"
+    accion: String!
+    "producto | categoria | usuario | pedido | inventario"
+    entidad: String!
+    entidadId: ID
+    mensaje: String!
+    "Quién lo hizo"
+    usuario: String
+    fecha: String!
+  }
+
+  input CategoriaInput {
+    nombre: String!
+    descripcion: String
+    icono: String
+  }
+
+  input UsuarioAdminInput {
+    nombre: String!
+    email: String!
+    password: String!
+    "cliente | admin"
+    rol: String!
+  }
+
+  input UsuarioUpdateInput {
+    nombre: String
+    rol: String
   }
 
   type Categoria {
@@ -141,8 +197,16 @@ export const typeDefs = /* GraphQL */ `
     misPedidos: [Pedido!]!
     "Un pedido: solo su dueño o un admin"
     pedido(id: ID!): Pedido
-    "Todos los pedidos: solo admin"
-    pedidos: [Pedido!]!
+    "Todos los pedidos (con filtros opcionales): solo admin"
+    pedidos(estado: String, estadoPago: String, busqueda: String, limite: Int = 200): [Pedido!]!
+
+    # ---- BackOffice (solo admin) ----
+    "Usuarios del sistema con búsqueda por nombre/correo y filtro por rol"
+    usuarios(busqueda: String, rol: String): [Usuario!]!
+    "Kardex: movimientos de inventario (de un producto o de todos)"
+    movimientosInventario(productoId: ID, limite: Int = 100): [MovimientoInventario!]!
+    "Bitácora de auditoría"
+    bitacora(entidad: String, limite: Int = 100): [EventoBackoffice!]!
     "Dashboard de administrador: estadísticas de ventas de los últimos N días (solo admin)"
     estadisticasAdmin(dias: Int = 30): EstadisticasAdmin!
   }
@@ -214,6 +278,19 @@ export const typeDefs = /* GraphQL */ `
     "Admin — confirma manualmente un cobro (p. ej. una transferencia) o lo regresa a pendiente."
     actualizarEstadoPago(id: ID!, estadoPago: String!): Pedido!
 
+    # ---- BackOffice (solo admin) ----
+    "Categorías: alta, edición y baja (solo si no tiene productos)"
+    crearCategoria(input: CategoriaInput!): Categoria!
+    actualizarCategoria(id: ID!, input: CategoriaInput!): Categoria!
+    eliminarCategoria(id: ID!): Boolean!
+    "Inventario: suma (entrada) o resta (salida/merma) stock y lo registra en el kardex"
+    ajustarStock(productoId: ID!, cantidad: Int!, tipo: String!, motivo: String!): Producto!
+    "Usuarios: alta con rol, edición, activar/desactivar y restablecer contraseña"
+    crearUsuarioAdmin(input: UsuarioAdminInput!): Usuario!
+    actualizarUsuario(id: ID!, input: UsuarioUpdateInput!): Usuario!
+    cambiarEstadoUsuario(id: ID!, activo: Boolean!): Usuario!
+    restablecerPasswordUsuario(id: ID!, nueva: String!): Boolean!
+
     "Auth System — inicia sesión y devuelve un token de sesión."
     iniciarSesion(email: String!, password: String!): AuthPayload!
 
@@ -228,5 +305,16 @@ export const typeDefs = /* GraphQL */ `
 
     "Requiere sesión. Cambia la contraseña y cierra las demás sesiones."
     cambiarPassword(actual: String!, nueva: String!, confirm: String!): Boolean!
+  }
+
+  # ================= GraphQL Subscriptions (tiempo real, solo admin) =================
+  # Viajan por SSE (Server-Sent Events): el BackOffice se actualiza solo, sin recargar.
+  type Subscription {
+    "Cada acción registrada en la bitácora (altas, cambios, pedidos, pagos, stock…)"
+    eventoBackoffice: EventoBackoffice!
+    "Un pedido se creó o cambió de estado de envío o de pago"
+    pedidoActualizado: Pedido!
+    "Cambió el stock de un producto (venta, devolución, ajuste)"
+    stockActualizado: Producto!
   }
 `;
